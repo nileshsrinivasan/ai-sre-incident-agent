@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Incident console</title>
+<style>
+:root{
+  --paper:#f2f4f7; --surface:#ffffff; --ink:#172033; --muted:#566274; --line:#d5dbe4; --soft:#eaeef4;
+  --focus:#1b4db1; --red:#b42318; --amber:#b54708; --green:#067647; --blue:#175cd3; --grey:#566274;
+  --approve:#0e7c4a; --approve-ink:#ffffff;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#0f141c; --surface:#171e29; --ink:#e7ecf3; --muted:#9aa6b6; --line:#2b3544; --soft:#212a38;
+    --focus:#84adff; --red:#f97066; --amber:#fdb022; --green:#47cd89; --blue:#84adff; --grey:#9aa6b6;
+    --approve:#47cd89; --approve-ink:#0b1f15;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 "Segoe UI Variable","Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:14px 24px;background:var(--surface);border-bottom:1px solid var(--line)}
+header.top h1{font-size:19px;margin:0;font-weight:650;letter-spacing:-.01em}
+.mode{font-size:13px;color:var(--muted)}
+#banner{display:none;padding:10px 24px;font-size:14px;border-bottom:1px solid var(--line)}
+#banner.busy{display:block;background:color-mix(in srgb,var(--blue) 12%,var(--surface));color:var(--ink)}
+#banner.error{display:block;background:color-mix(in srgb,var(--red) 12%,var(--surface));color:var(--ink)}
+.layout{display:grid;grid-template-columns:330px 1fr;gap:24px;padding:24px;max-width:1280px;margin:0 auto}
+aside{display:flex;flex-direction:column;gap:20px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.panel h2{font-size:15px;margin:0 0 8px;font-weight:650}
+.hint{font-size:13px;color:var(--muted);margin:8px 0 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.btn{border:1px solid var(--line);background:var(--surface);padding:7px 12px;border-radius:7px;cursor:pointer}
+.btn:hover:not(:disabled){background:var(--soft)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.primary:hover:not(:disabled){background:var(--ink);opacity:.88}
+.field{display:block;font-size:13px;color:var(--muted);margin-top:8px}
+.field input{display:block;width:100%;margin-top:3px;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink)}
+.demo-state{display:flex;align-items:center;gap:8px;font-size:14px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--grey);flex:none}
+.dot.ok{background:var(--green)} .dot.bad{background:var(--red)}
+#list{display:flex;flex-direction:column;gap:6px}
+.item{display:block;width:100%;text-align:left;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);cursor:pointer}
+.item:hover{background:var(--soft)}
+.item[aria-current="true"]{border-color:var(--ink);box-shadow:inset 3px 0 0 var(--ink)}
+.item .t{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.item .m{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px;align-items:center;font-size:12px;color:var(--muted)}
+.chip{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;color:var(--grey);background:color-mix(in srgb,currentColor 13%,transparent)}
+.chip.sev1,.chip.escalated,.chip.high{color:var(--red)}
+.chip.sev2,.chip.wait,.chip.medium{color:var(--amber)}
+.chip.resolved,.chip.low{color:var(--green)}
+.chip.work{color:var(--blue)}
+main{min-width:0}
+.empty{color:var(--muted);padding:24px 0}
+.head{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.head h2{margin:0;font-size:24px;letter-spacing:-.015em;font-weight:650}
+.sub{color:var(--muted);font-size:13px;margin:2px 0 0}
+.steps{display:flex;flex-wrap:wrap;gap:0;list-style:none;padding:0;margin:18px 0 22px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.steps li{flex:1 1 130px;padding:9px 12px;font-size:13px;border-right:1px solid var(--line);color:var(--muted)}
+.steps li:last-child{border-right:0}
+.steps b{display:block;font-weight:600;color:var(--ink);font-size:14px}
+.steps .done b::before{content:"\2713\00a0";color:var(--green)}
+.steps .now{background:color-mix(in srgb,var(--blue) 10%,var(--surface))}
+.steps .now b::before{content:"\25CF\00a0";color:var(--blue)}
+.steps .fail b::before{content:"\2715\00a0";color:var(--red)}
+.steps .todo b{color:var(--muted);font-weight:500}
+.decision{border:1px solid var(--line);border-left:6px solid var(--amber);border-radius:10px;background:var(--surface);padding:18px 20px;margin:0 0 26px}
+.decision h3{margin:0 0 4px;font-size:20px;letter-spacing:-.01em}
+.decision .why{margin:0 0 12px;max-width:70ch}
+dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:5px 16px;margin:0 0 14px;font-size:14px}
+dl.facts dt{color:var(--muted)} dl.facts dd{margin:0;max-width:70ch}
+.fields{display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:12px}
+.approve{background:var(--approve);color:var(--approve-ink);border-color:var(--approve);font-weight:650;padding:9px 16px}
+.approve:hover:not(:disabled){background:var(--approve);opacity:.9}
+.reject{padding:9px 16px}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0}
+section.block{margin:0 0 26px;max-width:80ch}
+section.block h3{font-size:16px;margin:0 0 6px;font-weight:650}
+section.block p{margin:4px 0}
+section.block ul{margin:6px 0;padding-left:20px}
+.metrics{display:flex;flex-wrap:wrap;gap:8px 28px;margin:8px 0}
+.metrics div{font-size:13px;color:var(--muted)}
+.metrics strong{display:block;font-size:20px;color:var(--ink);font-weight:650}
+.timeline{list-style:none;margin:6px 0;padding:0;border-left:2px solid var(--line)}
+.timeline li{padding:2px 0 8px 14px;font-size:14px}
+.timeline time{color:var(--muted);font-size:12px;margin-right:8px}
+details.audit{margin:0 0 30px;max-width:80ch}
+details.audit summary{cursor:pointer;font-weight:600}
+pre.log{white-space:pre-wrap;word-break:break-word;background:var(--soft);padding:10px 12px;border-radius:8px;font:12px/1.5 ui-monospace,Consolas,monospace;max-height:320px;overflow:auto}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr;padding:14px}
+  .fields{grid-template-columns:1fr}
+  header.top{padding:12px 14px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Incident console</h1>
+  <span class="mode" id="mode">checking the agent...</span>
+</header>
+<div id="banner" role="status" aria-live="polite"></div>
+
+<div class="layout">
+  <aside>
+    <section class="panel" aria-labelledby="h-demo">
+      <h2 id="h-demo">Practice service</h2>
+      <div class="demo-state"><span class="dot" id="demoDot"></span><span id="demoText">checking...</span></div>
+      <div class="row">
+        <button class="btn" data-act="break" data-mode="bad_deploy">Break: bad release</button>
+        <button class="btn" data-act="break" data-mode="db_hog">Break: stuck database query</button>
+        <button class="btn" data-act="heal">Reset service</button>
+      </div>
+      <p class="hint">After breaking it, wait about a minute so Prometheus can see the problem, then create an incident. These buttons only affect the practice service. The agent does not use them.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-new">
+      <h2 id="h-new">New incident</h2>
+      <label class="field">Title<input id="newTitle" value="Checkout failing for customers"></label>
+      <div class="row"><button class="btn primary" data-act="create">Create and investigate</button></div>
+      <p class="hint">The agent checks metrics, logs and the database, then proposes a fix and waits for you.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="h-list">
+      <h2 id="h-list">Incidents</h2>
+      <div id="list"></div>
+    </section>
+  </aside>
+
+  <main id="detail" aria-live="polite">
+    <p class="empty">Select an incident on the left, or create a new one.</p>
+  </main>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ACTIONS = {
+  rollback_deployment: "Roll back the release",
+  terminate_blocking_queries: "Stop the stuck database query",
+  restart_service: "Restart the service"
+};
+const STATUS = {
+  open: ["Not investigated", "open"], triaged: ["Investigating", "work"], analyzed: ["Investigating", "work"],
+  awaiting_approval: ["Needs your decision", "wait"], remediating: ["Fixing", "work"],
+  resolved: ["Resolved", "resolved"], escalated: ["Escalated to a human", "escalated"]
+};
+let selected = null, busy = false, lastSig = "";
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* not json */ }
+  if (!r.ok) {
+    const d = body && body.detail;
+    throw new Error(d ? (typeof d === "string" ? d : JSON.stringify(d)) : r.status + " " + r.statusText);
+  }
+  return body;
+}
+const post = (path, data) => api(path, {
+  method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(data || {})
+});
+
+function fmtTime(ts) {
+  if (!ts) return "";
+  const d = new Date(String(ts).replace(" ", "T"));
+  return isNaN(d) ? String(ts) : d.toLocaleString([], {month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"});
+}
+const pct = x => x == null ? "n/a" : Math.round(x * 100) + "%";
+const secs = x => x == null ? "n/a" : x.toFixed(2) + " s";
+const label = a => ACTIONS[a] || a;
+const statusChip = s => { const m = STATUS[s] || [s, "open"]; return `<span class="chip ${m[1]}">${esc(m[0])}</span>`; };
+const sevChip = s => s ? `<span class="chip ${esc(String(s).toLowerCase())}">${esc(s)}</span>` : "";
+
+let bannerTimer = null;
+function banner(msg, kind) {
+  const b = $("#banner");
+  clearTimeout(bannerTimer);
+  b.className = msg ? kind : "";
+  b.textContent = msg || "";
+  if (kind === "error") bannerTimer = setTimeout(() => banner("", ""), 12000);
+}
+function lock(on) { document.querySelectorAll("button").forEach(b => b.disabled = on); }
+async function run(msg, fn) {
+  if (busy) return;
+  busy = true; lock(true); banner(msg, "busy");
+  try { await fn(); banner("", ""); }
+  catch (e) { banner(e.message, "error"); }
+  finally { busy = false; lock(false); }
+}
+
+/* ---------- left column ---------- */
+async function loadMode() {
+  try {
+    const h = await api("/health");
+    $("#mode").textContent = h.ai_mode === "openai" ? "AI reasoning on (" + h.model + ")" : "Rules only, no AI model";
+  } catch (e) { $("#mode").textContent = "Agent not reachable"; }
+}
+async function loadDemo() {
+  try {
+    const s = await api("/demo/status");
+    const bad = s.mode !== "healthy";
+    $("#demoDot").className = "dot " + (bad ? "bad" : "ok");
+    $("#demoText").textContent = s.mode === "healthy" ? "Healthy, release " + s.version
+      : s.mode === "bad_deploy" ? "Broken: bad release " + s.version : "Broken: stuck database query";
+  } catch (e) { $("#demoDot").className = "dot"; $("#demoText").textContent = "Not reachable"; }
+}
+async function loadList() {
+  try {
+    const rows = await api("/incidents");
+    $("#list").innerHTML = rows.length ? rows.map(r => `
+      <button class="item" data-act="select" data-id="${Number(r.id)}" aria-current="${r.id === selected}">
+        <span class="t"><span>#${Number(r.id)} ${esc(r.title)}</span></span>
+        <span class="m">${sevChip(r.severity)} ${statusChip(r.status)} <span>${esc(fmtTime(r.created_at))}</span></span>
+      </button>`).join("") : '<p class="hint">No incidents yet.</p>';
+  } catch (e) { $("#list").innerHTML = '<p class="hint">Could not load incidents: ' + esc(e.message) + "</p>"; }
+}
+
+/* ---------- detail ---------- */
+function steps(st, awaiting, status) {
+  const done = status === "resolved" || status === "escalated";
+  const approval = st.approval;
+  const list = [
+    ["Triage", !!st.triage, false],
+    ["Root cause", !!st.rca, false],
+    ["Fix proposed", !!st.plan, false],
+    ["Your decision", !!approval, approval && approval.approved === false],
+    ["Fix applied", !!(st.execution && st.execution.executed), !!(st.execution && st.execution.executed === false)],
+    ["Recovery check", !!st.verification, !!(st.verification && !st.verification.resolved)]
+  ];
+  let currentSet = false;
+  return `<ol class="steps">` + list.map(([name, ok, failed]) => {
+    let cls = "todo";
+    if (failed) cls = "fail";
+    else if (ok) cls = "done";
+    else if (!currentSet && !done) { cls = "now"; currentSet = true; }
+    if (name === "Your decision" && awaiting) cls = "now";
+    return `<li class="${cls}"><b>${esc(name)}</b></li>`;
+  }).join("") + `</ol>`;
+}
+const li = arr => (arr || []).map(x => `<li>${esc(x)}</li>`).join("");
+
+function renderDetail(d) {
+  const inc = d.incident, wf = d.workflow || {}, st = wf.state || {};
+  const plan = st.plan, awaiting = !!wf.awaiting_approval;
+  let h = `<div class="head"><h2>#${Number(inc.id)} ${esc(inc.title)}</h2>${sevChip(inc.severity)} ${statusChip(inc.status)}</div>
+    <p class="sub">${esc(inc.service)}, opened ${esc(fmtTime(inc.created_at))}</p>`;
+  h += steps(st, awaiting, inc.status);
+
+  if (!st.triage) {
+    h += `<section class="block"><h3>Not investigated yet</h3>
+      <p>The agent has not looked at this incident. Start the investigation to see what it finds.</p>
+      <div class="row"><button class="btn primary" data-act="investigate" data-id="${Number(inc.id)}">Run investigation</button></div></section>`;
+  }
+
+  if (awaiting && plan) {
+    const name = (function () { try { return localStorage.getItem("approver") || ""; } catch (e) { return ""; } })();
+    h += `<section class="decision" aria-labelledby="dec">
+      <h3 id="dec">The agent wants to: ${esc(label(plan.action))}</h3>
+      <p class="why">${esc(plan.reason)}</p>
+      <dl class="facts">
+        <dt>Action</dt><dd>${esc(plan.action)} on ${esc(plan.target)}</dd>
+        <dt>Risk</dt><dd><span class="chip ${esc(String(plan.risk).toLowerCase())}">${esc(plan.risk)}</span></dd>
+        <dt>Expected result</dt><dd>${esc(plan.expected_outcome)}</dd>
+        <dt>If it goes wrong</dt><dd>${esc(plan.rollback_plan)}</dd>
+      </dl>
+      <div class="fields">
+        <label class="field">Your name<input id="approver" value="${esc(name)}" autocomplete="off"></label>
+        <label class="field">Comment, saved in the audit trail<input id="comment" value="${esc("Reviewed: " + label(plan.action))}" autocomplete="off"></label>
+      </div>
+      <div class="row">
+        <button class="btn approve" data-act="decide" data-ok="1" data-id="${Number(inc.id)}">Approve and run the fix</button>
+        <button class="btn reject" data-act="decide" data-ok="0" data-id="${Number(inc.id)}">Reject</button>
+      </div>
+      <p class="note">Nothing has changed yet. Approving runs the fix and then re-checks the metrics, which takes about a minute. Read the action above and make sure it matches your comment.</p>
+    </section>`;
+  }
+
+  if (st.health || st.triage) {
+    const hl = st.health || {};
+    h += `<section class="block"><h3>What the agent saw</h3>
+      <div class="metrics">
+        <div><strong>${esc(pct(hl.error_ratio))}</strong>requests failing</div>
+        <div><strong>${esc(secs(hl.p95_latency_seconds))}</strong>slowest 5% of responses</div>
+        <div><strong>${hl.requests_per_sec == null ? "n/a" : esc(hl.requests_per_sec.toFixed(1))}</strong>requests per second</div>
+      </div>
+      ${st.triage ? `<p>${esc(st.triage.impact)}</p><p class="sub">Possible causes it considered:</p><ul>${li(st.triage.hypotheses)}</ul>` : ""}
+    </section>`;
+  }
+
+  if (st.rca) {
+    h += `<section class="block"><h3>Likely cause</h3>
+      <p>${esc(st.rca.root_cause)}</p>
+      <p class="sub">Confidence ${esc(pct(st.rca.confidence))}. Evidence:</p><ul>${li(st.rca.evidence)}</ul>
+      ${st.db_diag ? `<p class="sub">Database check: ${esc((st.db_diag.findings || []).join("; "))}</p>` : ""}
+    </section>`;
+  }
+
+  if (st.approval && !awaiting) {
+    h += `<section class="block"><h3>Decision</h3>
+      <p>${st.approval.approved ? "Approved" : "Rejected"} by ${esc(st.approval.approver)}${st.approval.comment ? ": " + esc(st.approval.comment) : ""}</p></section>`;
+  }
+  if (st.execution) {
+    h += `<section class="block"><h3>Fix applied</h3>
+      <p>${esc(label(st.execution.action))}: ${st.execution.executed ? "done" : "blocked, " + esc(st.execution.error)}</p></section>`;
+  }
+  if (st.verification) {
+    const a = st.verification.health_after || {}, b = st.health || {};
+    h += `<section class="block"><h3>Recovery check</h3>
+      <p>${st.verification.resolved ? "The service has recovered." : "The service has not recovered. A human needs to take over."}</p>
+      <div class="metrics">
+        <div><strong>${esc(pct(b.error_ratio))} to ${esc(pct(a.error_ratio))}</strong>requests failing, before and after</div>
+        <div><strong>${esc(secs(b.p95_latency_seconds))} to ${esc(secs(a.p95_latency_seconds))}</strong>slowest 5% of responses</div>
+      </div></section>`;
+  }
+  if (inc.summary) h += `<section class="block"><h3>Summary</h3><p>${esc(inc.summary)}</p></section>`;
+
+  if ((st.timeline || []).length) {
+    h += `<section class="block"><h3>Timeline</h3><ul class="timeline">` +
+      st.timeline.map(t => `<li><time>${esc(fmtTime(t.ts))}</time>${esc(t.msg)}</li>`).join("") + `</ul></section>`;
+  }
+  h += `<details class="audit" data-id="${Number(inc.id)}"><summary>Audit trail</summary><div id="auditBody"><p class="hint">Open to load.</p></div></details>`;
+  $("#detail").innerHTML = h;
+}
+
+async function loadDetail(id, force) {
+  try {
+    const d = await api("/incidents/" + id);
+    const st = (d.workflow && d.workflow.state) || {};
+    const sig = JSON.stringify([id, d.incident.status, d.incident.severity, !!(d.workflow && d.workflow.awaiting_approval), (st.timeline || []).length]);
+    if (!force && sig === lastSig) return;
+    lastSig = sig;
+    renderDetail(d);
+  } catch (e) { $("#detail").innerHTML = '<p class="empty">Could not load this incident: ' + esc(e.message) + "</p>"; }
+}
+async function select(id) { selected = id; lastSig = ""; await loadDetail(id, true); loadList(); }
+
+async function loadAudit(el) {
+  const box = el.querySelector("#auditBody");
+  try {
+    const rows = await api("/incidents/" + el.dataset.id + "/audit");
+    box.innerHTML = rows.length ? `<pre class="log">` + rows.map(r =>
+      esc(fmtTime(r.ts) + "  " + r.actor + "  " + r.event + "  " + JSON.stringify(r.detail))).join("\n") + `</pre>`
+      : '<p class="hint">No entries.</p>';
+  } catch (e) { box.innerHTML = '<p class="hint">Could not load: ' + esc(e.message) + "</p>"; }
+}
+
+/* ---------- actions ---------- */
+document.addEventListener("click", ev => {
+  const el = ev.target.closest("[data-act]");
+  if (!el || busy) return;
+  const act = el.dataset.act, id = Number(el.dataset.id);
+  if (act === "select") select(id);
+  else if (act === "break") run("Breaking the practice service...", async () => { await post("/demo/fault/" + el.dataset.mode); await loadDemo(); });
+  else if (act === "heal") run("Resetting the practice service...", async () => { await post("/demo/heal"); await loadDemo(); });
+  else if (act === "create") run("Creating the incident and investigating. This takes up to a minute.", async () => {
+    const inc = await post("/incidents", {title: $("#newTitle").value.trim() || "Checkout failing for customers"});
+    selected = inc.id; lastSig = "";
+    await loadList();
+    try { await post("/incidents/" + inc.id + "/investigate"); }
+    finally { await loadDetail(inc.id, true); await loadList(); }
+  });
+  else if (act === "investigate") run("Investigating. This takes up to a minute.", async () => {
+    try { await post("/incidents/" + id + "/investigate"); }
+    finally { await loadDetail(id, true); await loadList(); }
+  });
+  else if (act === "decide") {
+    const ok = el.dataset.ok === "1";
+    const approver = ($("#approver").value || "").trim();
+    if (!approver) { banner("Enter your name first. It is saved in the audit trail.", "error"); $("#approver").focus(); return; }
+    try { localStorage.setItem("approver", approver); } catch (e) { /* ignore */ }
+    const comment = ($("#comment").value || "").trim() || (ok ? "Approved" : "Rejected");
+    run(ok ? "Running the fix and checking recovery. This takes about a minute." : "Recording your decision...", async () => {
+      try { await post("/incidents/" + id + "/approve", {approved: ok, approver, comment}); }
+      finally { await loadDetail(id, true); await loadList(); }
+    });
+  }
+});
+document.addEventListener("toggle", ev => {
+  const el = ev.target;
+  if (el.matches && el.matches("details.audit") && el.open) loadAudit(el);
+}, true);
+
+/* ---------- start ---------- */
+loadMode(); loadDemo(); loadList();
+setInterval(() => {
+  if (busy) return;
+  loadList(); loadDemo();
+  if (selected != null) loadDetail(selected, false);
+}, 6000);
+</script>
+</body>
+</html>

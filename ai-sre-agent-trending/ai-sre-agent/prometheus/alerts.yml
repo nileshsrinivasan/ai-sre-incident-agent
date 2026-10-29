@@ -1,0 +1,22 @@
+groups:
+  - name: demo-service-slo
+    rules:
+      - alert: ServiceDown
+        expr: up{job="demo-service"} == 0
+        for: 15s
+        labels: { severity: critical }
+        annotations: { summary: "demo-service is not being scraped / is down" }
+      - alert: HighErrorRatio            # "Errors" golden signal
+        expr: |
+          sum(rate(http_requests_total{service="demo-service",status=~"5.."}[1m]))
+          / sum(rate(http_requests_total{service="demo-service"}[1m])) > 0.05
+        for: 30s
+        labels: { severity: critical }
+        annotations: { summary: "More than 5% of requests are failing" }
+      - alert: HighLatencyP95            # "Latency" golden signal
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket{service="demo-service"}[1m])) by (le)) > 1
+        for: 30s
+        labels: { severity: warning }
+        annotations: { summary: "95th percentile latency above 1 second" }

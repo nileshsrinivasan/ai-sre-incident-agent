@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: sre
+      POSTGRES_PASSWORD: sre
+      POSTGRES_DB: sre
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sre -d sre"]
+      interval: 3s
+      retries: 20
+    ports: ["5432:5432"]
+
+  demo-service:            # the "broken-able" app we monitor
+    build: .
+    command: uvicorn demo_service.main:app --host 0.0.0.0 --port 8001
+    environment:
+      DATABASE_URL: postgresql://sre:sre@postgres:5432/sre
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports: ["8001:8001"]
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml
+    ports: ["9090:9090"]
+    depends_on: [demo-service]
+
+  api:                     # the AI SRE agent (FastAPI + LangGraph + MCP)
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://sre:sre@postgres:5432/sre
+      PROMETHEUS_URL: http://prometheus:9090
+      DEMO_SERVICE_URL: http://demo-service:8001
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      VERIFY_WAIT_SECONDS: ${VERIFY_WAIT_SECONDS:-45}
+    depends_on:
+      postgres: { condition: service_healthy }
+      prometheus: { condition: service_started }
+    ports: ["8000:8000"]
+
+volumes:
+  pgdata:
